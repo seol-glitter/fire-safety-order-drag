@@ -1,0 +1,113 @@
+<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>순서 드래그 – 초경량/풀스크린</title>
+<style>
+*{box-sizing:border-box}html,body{height:100%;margin:0}body{font-family:system-ui,'Noto Sans KR',sans-serif;background:#000}
+.stage{position:fixed;inset:0;overflow:hidden;user-select:none;-webkit-user-select:none}
+#bg{position:absolute;inset:0;width:100vw;height:100vh;object-fit:contain}
+.slotimg{position:absolute;width:16%;pointer-events:none} /* 숫자 드롭존(이미지) */
+.cardimg{position:absolute;width:20%;touch-action:none;cursor:grab;border-radius:10px;box-shadow:0 3px 8px rgba(0,0,0,.15)}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;visibility:hidden;opacity:0;transition:.2s}
+.modal{background:#fff;border-radius:14px;padding:20px 18px;max-width:420px;width:90%;text-align:center;box-shadow:0 8px 24px rgba(0,0,0,.35)}
+.modal h2{margin:0 0 8px} .modal p{color:#555;margin:0 0 14px}
+.btn{appearance:none;border:1px solid #d0d0d0;background:#fff;border-radius:10px;padding:10px 14px;font-weight:600;cursor:pointer}
+.btn.primary{background:#111;color:#fff;border-color:#111}
+.actions{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+.show{visibility:visible;opacity:1}
+.homeBtn{position:fixed;right:14px;top:14px;z-index:5}
+</style>
+<div class="stage" id="stage">
+  <img id="bg" src="assets/bg.jpg" alt="배경">
+  <!-- 숫자 이미지(드롭존) -->
+  <img id="slot1" class="slotimg" src="assets/slot1.png" alt="1">
+  <img id="slot2" class="slotimg" src="assets/slot2.png" alt="2">
+  <img id="slot3" class="slotimg" src="assets/slot3.png" alt="3">
+  <!-- 드래그 카드 -->
+  <img id="card1" class="cardimg" src="assets/card1.png" alt="멈춰요">
+  <img id="card2" class="cardimg" src="assets/card2.png" alt="엎드려요">
+  <img id="card3" class="cardimg" src="assets/card3.png" alt="굴러요">
+  <button id="home" class="btn homeBtn" style="display:none">메인으로</button>
+  <audio id="ding" src=assets/correct.mp3" preload="auto"></audio>
+</div>
+<!-- 성공 오버레이 -->
+<div id="success" class="overlay">
+  <div class="modal">
+    <h2>정답입니다! 🎉</h2>
+    <p>3가지 모두 제 자리에 드롭했어요.</p>
+    <div class="actions">
+      <button id="retry" class="btn">다시하기</button>
+      <button id="goHome" class="btn primary">메인으로</button>
+    </div>
+  </div>
+</div>
+<script>
+const HOME_URL = "https://sites.google.com/your-site/main"; // 구글 사이트 메인 주소로 교체
+const SLOTS=[
+  {id:'slot1', left:78, top:10, width:16},
+  {id:'slot2', left:78, top:40, width:16},
+  {id:'slot3', left:78, top:70, width:16}
+];
+const STARTS=[
+  {id:'card1', left:6, top:10},
+  {id:'card2', left:6, top:40},
+  {id:'card3', left:6, top:70}
+];
+const MAP={ card1:'slot1', card2:'slot2', card3:'slot3' };
+
+const bg=document.getElementById('bg');
+const ding=document.getElementById('ding');
+const homeBtn=document.getElementById('home');
+const success=document.getElementById('success');
+const retry=document.getElementById('retry');
+const goHome=document.getElementById('goHome');
+
+function pct(v,t){return v/100*t}
+function layout(){
+  const r=bg.getBoundingClientRect();
+  SLOTS.forEach(s=>{
+    const el=document.getElementById(s.id);
+    const nw=el.naturalWidth||100, nh=el.naturalHeight||100;
+    const w=pct(s.width,r.width), h=w*(nh/nw);
+    el.style.width=w+'px';
+    el.style.left=(r.left+pct(s.left,r.width))+'px';
+    el.style.top =(r.top +pct(s.top ,r.height))+'px';
+  });
+  STARTS.forEach(c=>{
+    const el=document.getElementById(c.id);
+    el.style.left=(r.left+pct(c.left,r.width))+'px';
+    el.style.top =(r.top +pct(c.top ,r.height))+'px';
+  });
+}
+
+let drag=null,ox=0,oy=0,placed=new Set();
+function pt(e){return e.touches?{x:e.touches[0].clientX,y:e.touches[0].clientY}:{x:e.clientX,y:e.clientY}}
+function down(e){drag=e.currentTarget;const p=pt(e),b=drag.getBoundingClientRect();ox=p.x-b.left;oy=p.y-b.top;drag.style.cursor='grabbing'}
+function move(e){if(!drag)return;const p=pt(e);drag.style.left=(p.x-ox)+'px';drag.style.top=(p.y-oy)+'px'}
+function up(){if(!drag)return;const target=MAP[drag.id];const a=drag.getBoundingClientRect();const b=document.getElementById(target).getBoundingClientRect();
+  if(a.left<b.right&&a.right>b.left&&a.top<b.bottom&&a.bottom>b.top){
+    drag.style.left=b.left+'px'; drag.style.top=b.top+'px';
+    try{ding.currentTime=0;ding.play();}catch(e){}
+    placed.add(drag.id); if(placed.size===3) onSuccess();
+  }
+  drag.style.cursor='grab'; drag=null;
+}
+function onSuccess(){ success.classList.add('show'); homeBtn.style.display='block'; }
+function resetGame(){ placed.clear(); success.classList.remove('show'); layout(); }
+
+['card1','card2','card3'].forEach(id=>{
+  const el=document.getElementById(id);
+  el.addEventListener('mousedown',down);
+  window.addEventListener('mousemove',move);
+  window.addEventListener('mouseup',up);
+  el.addEventListener('touchstart',e=>{e.preventDefault();down(e)});
+  window.addEventListener('touchmove',e=>{e.preventDefault();move(e)},{passive:false});
+  window.addEventListener('touchend',up);
+});
+retry.onclick=resetGame;
+goHome.onclick=()=>{ try{ window.top.location.href = HOME_URL; }catch(e){ location.href = HOME_URL; } };
+homeBtn.onclick=goHome;
+
+window.addEventListener('resize',layout);
+bg.addEventListener('load',layout);
+Promise.all(Array.from(document.querySelectorAll('.slotimg')).map(img=>new Promise(res=>{ if(img.complete) return res(); img.onload=res; img.onerror=res; }))).then(layout);
+layout();
+</script>
